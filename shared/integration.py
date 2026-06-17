@@ -180,14 +180,29 @@ Voorbeeld: `GET {api_url}/products`
 | PATCH | /{{table}}/{{id}} | Update |
 | DELETE | /{{table}}/{{id}} | Verwijder |
 
-## Automatische kolommen (schema-less API)
+## Automatische tabellen & kolommen (schema-less API)
 
-Bij **POST** en **PATCH** worden onbekende kolommen in de JSON body **automatisch aangemaakt**:
+Bij **POST** naar een onbekende tabel wordt die **automatisch aangemaakt**:
+- Tabel krijgt standaard een `id` kolom (integer, primary key, auto-increment)
+- Kolommen uit de JSON body worden toegevoegd met afgeleid type
+
+Bij **POST** en **PATCH** naar een bestaande tabel worden onbekende kolommen **automatisch aangemaakt**:
 - Metadata (admin schema) wordt bijgewerkt
 - SQLite krijgt `ALTER TABLE ADD COLUMN`
 - Type wordt afgeleid van de waarde: string→text, number→integer/float, bool→boolean, object/array→json
 
-Voorbeeld — tabel `products` heeft alleen `id` en `name`, je stuurt:
+Je hoeft tabellen en kolommen **niet** vooraf in admin aan te maken — stuur een POST naar `/{{table}}` met je data.
+
+Voorbeeld — tabel `products` bestaat nog niet:
+```http
+POST {api_url}/products
+Content-Type: application/json
+
+{{ "name": "Apple", "price": 1.50, "in_stock": true }}
+```
+→ tabel `products` wordt aangemaakt met kolommen `id`, `name`, `price`, `in_stock`.
+
+Bestaande tabel — je stuurt extra velden:
 ```json
 {{ "name": "Apple", "price": 1.50, "in_stock": true }}
 ```

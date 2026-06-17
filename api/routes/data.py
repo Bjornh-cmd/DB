@@ -3,10 +3,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from api.deps import get_current_database, get_table_by_name
+from api.deps import get_current_database
 from shared.meta_db import get_db
 from shared.models import Database
-from shared.schema_sync import ensure_columns_from_data
+from shared.schema_sync import ensure_columns_from_data, ensure_table_from_data, find_table
 from shared.schemas import ColumnOut, RowListResponse, TableSchemaOut
 from shared.tenant_engine import (
     delete_row,
@@ -38,7 +38,9 @@ def list_table_rows(
     sort: str | None = None,
     database: Database = Depends(get_current_database),
 ):
-    table = get_table_by_name(database, table_name)
+    table = find_table(database, table_name)
+    if table is None:
+        return RowListResponse(rows=[], total=0, limit=limit, offset=offset)
     rows, total = list_rows(table, database.sqlite_path, limit=limit, offset=offset, sort=sort)
     return RowListResponse(rows=rows, total=total, limit=limit, offset=offset)
 
@@ -49,7 +51,9 @@ def get_table_row(
     row_id: str,
     database: Database = Depends(get_current_database),
 ):
-    table = get_table_by_name(database, table_name)
+    table = find_table(database, table_name)
+    if table is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
     row = get_row(table, database.sqlite_path, row_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Row not found")
@@ -63,8 +67,8 @@ def create_row(
     db: Session = Depends(get_db),
     database: Database = Depends(get_current_database),
 ):
-    table = get_table_by_name(database, table_name)
     try:
+        table = ensure_table_from_data(db, database, table_name, body)
         ensure_columns_from_data(db, table, database.sqlite_path, body)
         return insert_row(table, database.sqlite_path, body)
     except ValueError as exc:
@@ -79,7 +83,9 @@ def patch_row(
     db: Session = Depends(get_db),
     database: Database = Depends(get_current_database),
 ):
-    table = get_table_by_name(database, table_name)
+    table = find_table(database, table_name)
+    if table is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
     try:
         ensure_columns_from_data(db, table, database.sqlite_path, body)
         row = update_row(table, database.sqlite_path, row_id, body)
@@ -97,6 +103,8 @@ def remove_row(
     row_id: str,
     database: Database = Depends(get_current_database),
 ):
-    table = get_table_by_name(database, table_name)
+    table = find_table(database, table_name)
+    if table is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
     if not delete_row(table, database.sqlite_path, row_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Row not found")

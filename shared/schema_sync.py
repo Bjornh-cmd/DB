@@ -5,8 +5,8 @@ from typing import Any
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
-from shared.models import IDENTIFIER_PATTERN, ColumnDefinition, ColumnType, TableDefinition
-from shared.tenant_engine import SQLITE_TYPE_MAP, get_tenant_engine
+from shared.models import IDENTIFIER_PATTERN, ColumnDefinition, ColumnType, Database, TableDefinition
+from shared.tenant_engine import SQLITE_TYPE_MAP, create_table_ddl, get_tenant_engine
 
 ISO_DATETIME_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$"
@@ -91,3 +91,58 @@ def ensure_columns_from_data(
         db.commit()
 
     return added
+
+
+def find_table(database: Database, table_name: str) -> TableDefinition | None:
+    for table in database.tables:
+        if table.name == table_name:
+            return table
+    return None
+
+
+def ensure_table_from_data(
+    db: Session,
+    database: Database,
+    table_name: str,
+    data: dict[str, Any],
+) -> TableDefinition:
+    """Create table metadata + SQLite table when it does not exist yet."""
+    existing = find_table(database, table_name)
+    if existing is not None:
+        return existing
+
+    if not IDENTIFIER_PATTERN.match(table_name):
+        raise ValueError(f"Invalid table name: {table_name}")
+
+    table = TableDefinition(database_id=database.id, name=table_name)
+    table.columns.append(
+        ColumnDefinition(
+            name="id",
+            type=ColumnType.INTEGER.value,
+            nullable=False,
+            is_primary_key=True,
+        )
+    )
+
+    for key, value in data.items():
+        if key == "id":
+            continue
+        if not IDENTIFIER_PATTERN.match(key):
+            raise ValueError(f"Invalid column name: {key}")
+        table.columns.append(
+            ColumnDefinition(
+                name=key,
+                type=infer_column_type(value),
+                nullable=True,
+                is_primary_key=False,
+            )
+        )
+
+    db.add(table)
+    db.flush()
+    table.database = database
+    create_table_ddl(table)
+    db.commit()
+    db.refresh(table, attribute_names=["columns"])
+    database.tables.append(table)
+    return table
