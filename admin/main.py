@@ -32,7 +32,7 @@ def root_not_found():
 
 app.mount(f"{DB_PREFIX}/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(pages.router, prefix=DB_PREFIX)
-app.include_router(admin_api.router, prefix=f"{DB_PREFIX}/api")
+app.include_router(admin_api.router, prefix=DB_PREFIX)
 app.include_router(tenant.router, prefix="/api/{username}/{password}")
 
 

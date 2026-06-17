@@ -32,15 +32,22 @@ def init_meta_db() -> None:
     from sqlalchemy import select
 
     with SessionLocal() as session:
-        admin = session.scalar(select(Admin).limit(1))
+        admin = session.scalar(select(Admin).where(Admin.username == settings.admin_username))
         if admin is None:
-            session.add(
-                Admin(
-                    username=settings.admin_username,
-                    password_hash=hash_password(settings.admin_password),
+            admin = session.scalar(select(Admin).limit(1))
+            if admin is None:
+                session.add(
+                    Admin(
+                        username=settings.admin_username,
+                        password_hash=hash_password(settings.admin_password),
+                    )
                 )
-            )
-            session.commit()
+            else:
+                admin.username = settings.admin_username
+                admin.password_hash = hash_password(settings.admin_password)
+        else:
+            admin.password_hash = hash_password(settings.admin_password)
+        session.commit()
 
 
 def get_db() -> Generator[Session, None, None]:
